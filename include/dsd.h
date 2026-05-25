@@ -1686,7 +1686,8 @@ int get_rtlsdr_sample(int16_t *sample, dsd_opts * opts, dsd_state * state);
 void rtlsdr_sighandler();
 void rtl_dev_tune(dsd_opts * opts, long int frequency);
 long int rtl_return_rms();
-void rtl_clean_queue();
+void rtl_clean_queue();        /* caller must hold output.rw write lock */
+void rtl_clean_queue_locked(); /* acquires lock internally — use from external call sites */
 /* two-dongle support (rtl_sdr_fm2.cpp) */
 void open_rtlsdr_stream2(dsd_opts *opts);
 void cleanup_rtlsdr_stream2(void);

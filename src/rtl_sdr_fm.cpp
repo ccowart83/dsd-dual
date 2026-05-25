@@ -1248,9 +1248,19 @@ long int rtl_return_rms()
 }
 
 //simple function to clear the rtl sample queue when tuning and during other events (ncurses menu open/close)
+// Caller must hold output.rw write lock.
 void rtl_clean_queue()
 {
 	//insert method to clear the entire queue to prevent sample 'lag'
 	std::queue<int16_t> empty; //create an empty queue
 	std::swap( output.queue, empty ); //swap in empty queue to effectively zero out current queue
+}
+
+// Locked wrapper — acquires output.rw before clearing the queue.
+// Use this from any call site that does not already hold the lock.
+void rtl_clean_queue_locked()
+{
+	pthread_rwlock_wrlock(&output.rw);
+	rtl_clean_queue();
+	pthread_rwlock_unlock(&output.rw);
 }

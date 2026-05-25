@@ -194,7 +194,7 @@
          #ifdef USE_RTLSDR
          if (opts->use_second_dongle) {
            opts->rtl_vc_active = 0;
-           rtl_clean_queue();  /* flush CC queue that backed up during voice call */
+           rtl_clean_queue_locked();  /* flush CC queue that backed up during voice call */
          } else
            rtl_dev_tune (opts, state->p25_cc_freq);
          state->dmr_rest_channel = -1;

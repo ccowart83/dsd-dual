@@ -574,7 +574,7 @@ void edacs_analog(dsd_opts * opts, dsd_state * state, int afs, unsigned char lcn
         opts->wav_out_f = close_and_rename_wav_file(opts->wav_out_f, opts->wav_out_file, opts->wav_out_dir, &state->event_history_s[0]);
       opts->wav_out_f = open_wav_file(opts->wav_out_dir, opts->wav_out_file, 8000, 0);
     }
-    rtl_clean_queue();
+    rtl_clean_queue_locked();
   }
   #endif
 
@@ -2437,7 +2437,7 @@ void eot_cc(dsd_opts * opts, dsd_state * state)
       state->p25_vc_freq[0] = state->p25_vc_freq[1] = 0;
       if (opts->use_second_dongle) {
         opts->rtl_vc_active = 0;
-        rtl_clean_queue();  /* flush CC queue that backed up during voice call */
+        rtl_clean_queue_locked();  /* flush CC queue that backed up during voice call */
       } else
         rtl_dev_tune (opts, state->p25_cc_freq);
       #endif
