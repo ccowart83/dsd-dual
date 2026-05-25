@@ -1174,7 +1174,13 @@ int get_rtlsdr_sample(int16_t *sample, dsd_opts * opts, dsd_state * state)
 
 	for (;;)
 	{
-		while (output.queue.empty())
+		/* Read-lock guards empty() — callback pushes under write lock, so calling
+		   empty() without a lock is a data race that corrupts std::deque internals. */
+		pthread_rwlock_rdlock(&output.rw);
+		bool is_empty = output.queue.empty();
+		pthread_rwlock_unlock(&output.rw);
+
+		while (is_empty)
 		{
 			struct timespec ts;
 			clock_gettime(CLOCK_REALTIME, &ts);
@@ -1188,7 +1194,12 @@ int get_rtlsdr_sample(int16_t *sample, dsd_opts * opts, dsd_state * state)
 			{
 				return -1;
 			}
+
+			pthread_rwlock_rdlock(&output.rw);
+			is_empty = output.queue.empty();
+			pthread_rwlock_unlock(&output.rw);
 		}
+
 		pthread_rwlock_wrlock(&output.rw);
 		if (!output.queue.empty()) /* re-check: rtl_dev_tune may have cleared queue between empty() test and lock */
 		{
