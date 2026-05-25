@@ -1504,6 +1504,9 @@ void edacs(dsd_opts * opts, dsd_state * state)
           fprintf (stderr, " [EMERGENCY]");
         }
         fprintf (stderr, "%s", KNRM);
+        fprintf (stdout, " Voice Grant: %s Group [%04d] LID [%05d] LCN [%02d]%s%s\n",
+                 is_digital ? "Digital" : "Analog", group, lid, lcn,
+                 getLcnStatusString(lcn), is_emergency ? " [EMERGENCY]" : "");
 
         //LCNs >= 26 are reserved to indicate status (queued, busy, denied, etc)
         if (lcn > state->edacs_lcn_count && lcn < 26)
