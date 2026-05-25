@@ -194,6 +194,8 @@ void edacs_analog(dsd_opts * opts, dsd_state * state, int afs, unsigned char lcn
   state->last_cc_sync_time = time(NULL);
   state->last_vc_sync_time = time(NULL);
 
+  time_t analog_start = time(NULL);
+
   memset (analog1, 0, sizeof(analog1));
   memset (analog2, 0, sizeof(analog2));
   memset (analog3, 0, sizeof(analog3));
@@ -207,7 +209,7 @@ void edacs_analog(dsd_opts * opts, dsd_state * state, int afs, unsigned char lcn
 
   fprintf (stderr, "\n");
 
-  while (!exitflag && count > 0)
+  while (!exitflag && count > 0 && (opts->use_second_dongle == 0 || (time(NULL) - analog_start) < 90))
   {
     //this will only work on 48k/1 short output
     if (opts->audio_in_type == 0)
@@ -295,28 +297,54 @@ void edacs_analog(dsd_opts * opts, dsd_state * state, int afs, unsigned char lcn
     #ifdef USE_RTLSDR
     if (opts->audio_in_type == 3)
     {
-      for (i = 0; i < 960; i++)
+      if (opts->use_second_dongle && opts->rtl_vc_active)
       {
-        get_rtlsdr_sample(&sample, opts, state);
-        sample *= opts->rtl_volume_multiplier;
-        analog1[i] = sample;
-      }
+        for (i = 0; i < 960; i++)
+        {
+          get_rtlsdr_sample2(&sample, opts, state);
+          sample *= opts->rtl_volume_multiplier;
+          analog1[i] = sample;
+        }
 
-      for (i = 0; i < 960; i++)
-      {
-        get_rtlsdr_sample(&sample, opts, state);
-        sample *= opts->rtl_volume_multiplier;
-        analog2[i] = sample;
-      }
+        for (i = 0; i < 960; i++)
+        {
+          get_rtlsdr_sample2(&sample, opts, state);
+          sample *= opts->rtl_volume_multiplier;
+          analog2[i] = sample;
+        }
 
-      for (i = 0; i < 960; i++)
-      {
-        get_rtlsdr_sample(&sample, opts, state);
-        sample *= opts->rtl_volume_multiplier;
-        analog3[i] = sample;
+        for (i = 0; i < 960; i++)
+        {
+          get_rtlsdr_sample2(&sample, opts, state);
+          sample *= opts->rtl_volume_multiplier;
+          analog3[i] = sample;
+        }
+        rms = rtl_return_rms2();
       }
-      //the rtl rms value works properly without needing a 'hard' squelch value
-      rms = rtl_return_rms();
+      else
+      {
+        for (i = 0; i < 960; i++)
+        {
+          get_rtlsdr_sample(&sample, opts, state);
+          sample *= opts->rtl_volume_multiplier;
+          analog1[i] = sample;
+        }
+
+        for (i = 0; i < 960; i++)
+        {
+          get_rtlsdr_sample(&sample, opts, state);
+          sample *= opts->rtl_volume_multiplier;
+          analog2[i] = sample;
+        }
+
+        for (i = 0; i < 960; i++)
+        {
+          get_rtlsdr_sample(&sample, opts, state);
+          sample *= opts->rtl_volume_multiplier;
+          analog3[i] = sample;
+        }
+        rms = rtl_return_rms();
+      }
     }
     #endif
 
@@ -529,6 +557,26 @@ void edacs_analog(dsd_opts * opts, dsd_state * state, int afs, unsigned char lcn
     if (count > 0) fprintf (stderr, "\n");
 
   }
+
+  /* Two-dongle mode: release VC and flush stale CC queue on analog call end.
+     Must clear p25_is_tuned here — if eot_cc() was not called (e.g. squelch drop or
+     90s timeout with no dotting sequence), leaving it set causes the CC decode loop
+     to skip all grant processing indefinitely via the goto EDACS_END guard. */
+  #ifdef USE_RTLSDR
+  if (opts->use_second_dongle && opts->rtl_vc_active)
+  {
+    opts->rtl_vc_active = 0;
+    opts->p25_is_tuned = 0;
+    state->last_cc_sync_time = time(NULL);
+    if (opts->dmr_stereo_wav == 1)
+    {
+      if (opts->wav_out_f != NULL)
+        opts->wav_out_f = close_and_rename_wav_file(opts->wav_out_f, opts->wav_out_file, opts->wav_out_dir, &state->event_history_s[0]);
+      opts->wav_out_f = open_wav_file(opts->wav_out_dir, opts->wav_out_file, 8000, 0);
+    }
+    rtl_clean_queue();
+  }
+  #endif
 
 }
 
@@ -1117,7 +1165,10 @@ void edacs(dsd_opts * opts, dsd_state * state)
             if (opts->audio_in_type == 3) //rtl dongle
             {
               #ifdef USE_RTLSDR
-              rtl_dev_tune (opts, state->trunk_lcn_freq[lcn-1]);
+              if (opts->use_second_dongle)
+                rtl_dev_tune2 (opts, state->trunk_lcn_freq[lcn-1]);
+              else
+                rtl_dev_tune (opts, state->trunk_lcn_freq[lcn-1]);
               state->edacs_tuned_lcn = lcn;
               opts->p25_is_tuned = 1;
               if (is_digital == 0)
@@ -1233,7 +1284,10 @@ void edacs(dsd_opts * opts, dsd_state * state)
             if (opts->audio_in_type == 3) //rtl dongle
             {
               #ifdef USE_RTLSDR
-              rtl_dev_tune (opts, state->trunk_lcn_freq[lcn-1]);
+              if (opts->use_second_dongle)
+                rtl_dev_tune2 (opts, state->trunk_lcn_freq[lcn-1]);
+              else
+                rtl_dev_tune (opts, state->trunk_lcn_freq[lcn-1]);
               state->edacs_tuned_lcn = lcn;
               opts->p25_is_tuned = 1;
               if (is_digital == 0)
@@ -1340,7 +1394,10 @@ void edacs(dsd_opts * opts, dsd_state * state)
             if (opts->audio_in_type == 3) //rtl dongle
             {
               #ifdef USE_RTLSDR
-              rtl_dev_tune (opts, state->trunk_lcn_freq[lcn-1]);
+              if (opts->use_second_dongle)
+                rtl_dev_tune2 (opts, state->trunk_lcn_freq[lcn-1]);
+              else
+                rtl_dev_tune (opts, state->trunk_lcn_freq[lcn-1]);
               state->edacs_tuned_lcn = lcn;
               opts->p25_is_tuned = 1;
               if (is_digital == 0)
@@ -1524,7 +1581,10 @@ void edacs(dsd_opts * opts, dsd_state * state)
             if (opts->audio_in_type == 3) //rtl dongle
             {
               #ifdef USE_RTLSDR
-              rtl_dev_tune (opts, state->trunk_lcn_freq[lcn-1]);
+              if (opts->use_second_dongle)
+                rtl_dev_tune2 (opts, state->trunk_lcn_freq[lcn-1]);
+              else
+                rtl_dev_tune (opts, state->trunk_lcn_freq[lcn-1]);
               state->edacs_tuned_lcn = lcn;
               opts->p25_is_tuned = 1;
               if (is_digital == 0) edacs_analog(opts, state, group, lcn);
@@ -1780,7 +1840,10 @@ void edacs(dsd_opts * opts, dsd_state * state)
               if (opts->audio_in_type == 3) //rtl dongle
               {
                 #ifdef USE_RTLSDR
-                rtl_dev_tune (opts, state->trunk_lcn_freq[lcn-1]);
+                if (opts->use_second_dongle)
+                  rtl_dev_tune2 (opts, state->trunk_lcn_freq[lcn-1]);
+                else
+                  rtl_dev_tune (opts, state->trunk_lcn_freq[lcn-1]);
                 state->edacs_tuned_lcn = lcn;
                 opts->p25_is_tuned = 1;
                 if (is_digital == 0) edacs_analog(opts, state, target, lcn);
@@ -1893,7 +1956,10 @@ void edacs(dsd_opts * opts, dsd_state * state)
               if (opts->audio_in_type == 3) //rtl dongle
               {
                 #ifdef USE_RTLSDR
-                rtl_dev_tune (opts, state->trunk_lcn_freq[lcn-1]);
+                if (opts->use_second_dongle)
+                  rtl_dev_tune2 (opts, state->trunk_lcn_freq[lcn-1]);
+                else
+                  rtl_dev_tune (opts, state->trunk_lcn_freq[lcn-1]);
                 state->edacs_tuned_lcn = lcn;
                 opts->p25_is_tuned = 1;
                 if (is_digital == 0) edacs_analog(opts, state, target, lcn);
@@ -2106,6 +2172,9 @@ void edacs(dsd_opts * opts, dsd_state * state)
               {
                 //Index starts at zero, LCNs locally here start at 1
                 state->p25_cc_freq = state->trunk_lcn_freq[state->edacs_cc_lcn - 1];
+                //Anchor hunt position to current CC so next hunt starts from a known LCN
+                if (state->edacs_cc_lcn >= 1 && state->edacs_cc_lcn <= 3)
+                  state->lcn_freq_roll = state->edacs_cc_lcn - 1;
               }
             }
           }
@@ -2189,7 +2258,10 @@ void edacs(dsd_opts * opts, dsd_state * state)
                 if (opts->audio_in_type == 3) //rtl dongle
                 {
                   #ifdef USE_RTLSDR
-                  rtl_dev_tune (opts, state->trunk_lcn_freq[lcn-1]);
+                  if (opts->use_second_dongle)
+                    rtl_dev_tune2 (opts, state->trunk_lcn_freq[lcn-1]);
+                  else
+                    rtl_dev_tune (opts, state->trunk_lcn_freq[lcn-1]);
                   state->edacs_tuned_lcn = lcn;
                   opts->p25_is_tuned = 1;
                   if (is_digital == 0) edacs_analog(opts, state, 0, lcn);
@@ -2359,7 +2431,11 @@ void eot_cc(dsd_opts * opts, dsd_state * state)
       sprintf (state->active_channel[1], "%s", "");
       opts->p25_is_tuned = 0;
       state->p25_vc_freq[0] = state->p25_vc_freq[1] = 0;
-      rtl_dev_tune (opts, state->p25_cc_freq);
+      if (opts->use_second_dongle) {
+        opts->rtl_vc_active = 0;
+        rtl_clean_queue();  /* flush CC queue that backed up during voice call */
+      } else
+        rtl_dev_tune (opts, state->p25_cc_freq);
       #endif
     }
 

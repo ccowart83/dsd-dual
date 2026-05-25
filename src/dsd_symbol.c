@@ -128,13 +128,19 @@ getSymbol (dsd_opts * opts, dsd_state * state, int have_sync)
       else if (opts->audio_in_type == 3)
       {
 #ifdef USE_RTLSDR
-        // Read demodulated stream here
-        if (get_rtlsdr_sample(&sample, opts, state) < 0)
-          cleanupAndExit(opts, state);
-        //update root means square power level
-        opts->rtl_rms = rtl_return_rms();
+        if (opts->use_second_dongle && opts->rtl_vc_active)
+        {
+          if (get_rtlsdr_sample2(&sample, opts, state) < 0)
+            cleanupAndExit(opts, state);
+          opts->rtl_rms = rtl_return_rms2();
+        }
+        else
+        {
+          if (get_rtlsdr_sample(&sample, opts, state) < 0)
+            cleanupAndExit(opts, state);
+          opts->rtl_rms = rtl_return_rms();
+        }
         sample *= opts->rtl_volume_multiplier;
-
 #endif
       }
 

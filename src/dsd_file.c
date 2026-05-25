@@ -507,6 +507,7 @@ SNDFILE * close_and_rename_wav_file(SNDFILE * wav_file, char * wav_out_filename,
   sf_close(wav_file);
 
   time_t event_time = event_struct->Event_History_Items[0].event_time;
+  if (event_time == 0) event_time = time(NULL);
   char * datestr = getDateF(event_time);
   char * timestr = getTimeF(event_time);
   uint16_t random_number = rand();
@@ -557,13 +558,6 @@ SNDFILE * close_and_rename_wav_file(SNDFILE * wav_file, char * wav_out_filename,
 
   rename (wav_out_filename, new_filename);
 
-  //WIP: Open File, seek, and if 44 bytes, delete it (empty wav file)
-  //TODO: May need to move the deletion ahead of renaming, and do a NULL check,
-  //some software may attempt to injest an empty .wav file first, but this should
-  //occur so quickly, the watchdog on rdio or similar shouldn't even realize it
-  //may also consider checking for a larger size, something that's more than a blip
-  //sometimes if encrypted and no key provided, if signal is marginal, short garbled audio
-  //could be written to a wav file, so may look into a value >= xx kb in size minimum
   FILE *file = fopen(new_filename, "r");
   if (file != NULL)
   {
@@ -571,9 +565,6 @@ SNDFILE * close_and_rename_wav_file(SNDFILE * wav_file, char * wav_out_filename,
     long size = ftell(file);
     fseek(file, 0, SEEK_SET); // Rewind to beginning
     fclose(file);
-
-    //debug
-    // fprintf (stderr, " Closed Wav File %s; Size: %d; \n", new_filename, size);
 
     if (size == 44)
       remove (new_filename);

@@ -192,7 +192,11 @@
        else if (opts->audio_in_type == 3)
        {
          #ifdef USE_RTLSDR
-         rtl_dev_tune (opts, state->p25_cc_freq);
+         if (opts->use_second_dongle) {
+           opts->rtl_vc_active = 0;
+           rtl_clean_queue();  /* flush CC queue that backed up during voice call */
+         } else
+           rtl_dev_tune (opts, state->p25_cc_freq);
          state->dmr_rest_channel = -1;
          #endif
        }
@@ -230,7 +234,23 @@
  
      state->is_con_plus = 0; //flag off
    }
- 
+
+   /* EDACS two-dongle CC hunt: when CC sync is lost, cycle through LCN 1-3 */
+   #ifdef USE_RTLSDR
+   if (opts->use_second_dongle && opts->p25_trunk == 1 && opts->p25_is_tuned == 0 &&
+       opts->audio_in_type == 3 && (time(NULL) - state->last_cc_sync_time) > opts->trunk_hangtime)
+   {
+     state->lcn_freq_roll = (state->lcn_freq_roll + 1) % 3;
+     long int hunt_freq = state->trunk_lcn_freq[state->lcn_freq_roll];
+     if (hunt_freq != 0)
+     {
+       rtl_dev_tune(opts, hunt_freq);
+       fprintf(stdout, " CC Hunt: LCN [%02d] %ld Hz\n", state->lcn_freq_roll + 1, hunt_freq);
+     }
+     state->last_cc_sync_time = time(NULL);
+   }
+   #endif
+
    state->dibit_buf_p = state->dibit_buf + 200;
    memset (state->dibit_buf, 0, sizeof (int) * 200);
    //dmr buffer
@@ -698,6 +718,14 @@
    opts->rtlsdr_center_freq = 850000000; //set to an initial value (if user is using a channel map, then they won't need to specify anything other than -i rtl if desired)
    opts->rtl_started = 0;
    opts->rtl_rms = 0; //root means square power level on rtl input signal
+   opts->use_second_dongle = 0;
+   opts->rtl_dev_index2 = 1;    /* default VC dongle to device index 1 */
+   opts->rtl_gain_value2 = 0;   /* AGC */
+   opts->rtlsdr_ppm_error2 = 0;
+   opts->rtl_bandwidth2 = 12;
+   opts->rtlsdr_center_freq2 = 0;
+   opts->rtl2_started = 0;
+   opts->rtl_vc_active = 0;
    //end RTL user options
    opts->pulse_raw_rate_in   = 48000;
    opts->pulse_raw_rate_out  = 48000;//
@@ -1601,6 +1629,9 @@
    printf ("                 (See group.csv for example)\n");
    printf ("  -T            Enable Trunking Features (NXDN/P25/EDACS/DMR) with RIGCTL/TCP or RTL Input\n");
    printf ("  -Y            Enable Scanning Mode with RIGCTL/TCP or RTL Input \n");
+   printf ("  -j <dev[:gain[:ppm[:bw_khz]]]>  Two-dongle EDACS: specify voice-channel (VC) dongle.\n");
+   printf ("                 CC dongle stays on control channel; VC dongle tunes to granted voice freq.\n");
+   printf ("                 Example: -j 1  or  -j 1:0:0:12  (dev=1, AGC, 0ppm, 12kHz)\n");
    printf ("                 Experimental -- Can only scan for sync with enabled decoders, don't mix NXDN and DMR/P25!\n");
    printf ("                 This is not a Trunking Feature, just scans through conventional frequencies fast!\n");
    printf ("  -W            Use Imported Group List as a Trunking Allow/White List -- Only Tune with Mode A\n");
@@ -1642,6 +1673,11 @@
    {
      open_rtlsdr_stream(opts);
      opts->rtl_started = 1; //set here so ncurses terminal doesn't attempt to open it again
+     if (opts->use_second_dongle)
+     {
+       open_rtlsdr_stream2(opts);
+       opts->rtl2_started = 1;
+     }
      // #ifdef __arm__
      // fprintf (stderr, "WARNING: RMS Function is Disabled on ARM Devices (Raspberry Pi) due to High CPU use. \n");
      // fprintf (stderr, "RMS/Squelch Functionality for NXDN, dPMR, EDACS Analog, M17 and Raw Audio Monitor are unavailable and these modes will not function properly. \n");
@@ -1801,6 +1837,10 @@
    closeSymbolOutFile (opts, state);
  
    #ifdef USE_RTLSDR
+   if (opts->rtl2_started == 1)
+   {
+     cleanup_rtlsdr_stream2();
+   }
    if (opts->rtl_started == 1)
    {
      cleanup_rtlsdr_stream();
@@ -1895,7 +1935,7 @@
  
    exitflag = 0;
  
-   while ((c = getopt (argc, argv, "~yhaepPqs:t:v:z:i:o:d:c:g:n:w:B:C:R:f:m:u:x:A:S:G:D:L:V:U:YK:b:H:X:M:NQ:WrlZTF@:!:01:2:345:6:^:7:8_:9:Ek:I:J:O+:")) != -1)
+   while ((c = getopt (argc, argv, "~yhaepPqs:t:v:z:i:o:d:c:g:n:w:B:C:R:f:m:u:x:A:S:G:D:L:V:U:YK:b:H:X:M:NQ:WrlZTF@:!:01:2:345:6:^:7:8_:9:Ek:I:J:O+:j:")) != -1)
      {
  
        switch (c)
@@ -2335,6 +2375,34 @@
            strncpy(opts.audio_in_dev, optarg, 2047);
            opts.audio_in_dev[2047] = '\0';
            break;
+
+         case 'j': //VC dongle for two-dongle EDACS: dev[:gain[:ppm[:bandwidth_khz]]]
+         {
+           #ifdef USE_RTLSDR
+           opts.use_second_dongle = 1;
+           char jarg[256];
+           strncpy(jarg, optarg, 255);
+           jarg[255] = '\0';
+           char *jp = strtok(jarg, ":");
+           if (jp != NULL) opts.rtl_dev_index2    = atoi(jp);
+           jp = strtok(NULL, ":");
+           if (jp != NULL) opts.rtl_gain_value2   = atoi(jp);
+           jp = strtok(NULL, ":");
+           if (jp != NULL) opts.rtlsdr_ppm_error2 = atoi(jp);
+           jp = strtok(NULL, ":");
+           if (jp != NULL) {
+             int bw2 = atoi(jp);
+             if (bw2 == 4 || bw2 == 6 || bw2 == 8 || bw2 == 12 || bw2 == 16 || bw2 == 24)
+               opts.rtl_bandwidth2 = bw2;
+           }
+           fprintf(stderr, "Two-dongle mode: VC dongle dev=%d gain=%d ppm=%d bw=%d kHz\n",
+                   opts.rtl_dev_index2, opts.rtl_gain_value2,
+                   opts.rtlsdr_ppm_error2, opts.rtl_bandwidth2);
+           #else
+           fprintf(stderr, "RTL-SDR support not compiled; -j flag ignored.\n");
+           #endif
+           break;
+         }
  
          case 'o':
            strncpy(opts.audio_out_dev, optarg, 1023);

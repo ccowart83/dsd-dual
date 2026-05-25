@@ -371,6 +371,15 @@ typedef struct
   int rtl_bandwidth;
   int rtl_started;
   long int rtl_rms;
+  /* two-dongle EDACS support */
+  int use_second_dongle;    /* 1 = two-dongle mode (CC dongle + VC dongle) */
+  int rtl_dev_index2;       /* device index of the voice-channel dongle */
+  int rtl_gain_value2;      /* gain for VC dongle (0 = AGC) */
+  int rtlsdr_ppm_error2;    /* PPM correction for VC dongle */
+  int rtl_bandwidth2;       /* bandwidth (kHz) for VC dongle */
+  uint32_t rtlsdr_center_freq2; /* current tuned freq of VC dongle */
+  int rtl2_started;         /* 1 once open_rtlsdr_stream2() has been called */
+  int rtl_vc_active;        /* 1 = main loop reads from VC dongle, 0 = CC dongle */
   int monitor_input_audio;
   int analog_only;
   int pulse_raw_rate_in;
@@ -1678,6 +1687,13 @@ void rtlsdr_sighandler();
 void rtl_dev_tune(dsd_opts * opts, long int frequency);
 long int rtl_return_rms();
 void rtl_clean_queue();
+/* two-dongle support (rtl_sdr_fm2.cpp) */
+void open_rtlsdr_stream2(dsd_opts *opts);
+void cleanup_rtlsdr_stream2(void);
+int get_rtlsdr_sample2(int16_t *sample, dsd_opts *opts, dsd_state *state);
+void rtl_dev_tune2(dsd_opts *opts, long int frequency);
+long int rtl_return_rms2(void);
+void rtl_clean_queue2(void);
 #endif
 
 
