@@ -246,6 +246,7 @@
      {
        rtl_dev_tune(opts, hunt_freq);
        fprintf(stdout, " CC Hunt: LCN [%02d] %ld Hz\n", state->lcn_freq_roll + 1, hunt_freq);
+       fflush(stdout);
      }
      state->last_cc_sync_time = time(NULL);
    }
