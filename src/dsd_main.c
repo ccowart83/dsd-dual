@@ -235,12 +235,13 @@
      state->is_con_plus = 0; //flag off
    }
 
-   /* EDACS two-dongle CC hunt: when CC sync is lost, cycle through LCN 1-3 */
+   /* EDACS two-dongle CC hunt: when CC sync is lost, cycle through all loaded LCNs */
    #ifdef USE_RTLSDR
    if (opts->use_second_dongle && opts->p25_trunk == 1 && opts->p25_is_tuned == 0 &&
        opts->audio_in_type == 3 && (time(NULL) - state->last_cc_sync_time) > opts->trunk_hangtime)
    {
-     state->lcn_freq_roll = (state->lcn_freq_roll + 1) % 3;
+     int hunt_count = state->lcn_freq_count > 0 ? state->lcn_freq_count : 3;
+     state->lcn_freq_roll = (state->lcn_freq_roll + 1) % hunt_count;
      long int hunt_freq = state->trunk_lcn_freq[state->lcn_freq_roll];
      if (hunt_freq != 0)
      {
