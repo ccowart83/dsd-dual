@@ -571,7 +571,13 @@ void edacs_analog(dsd_opts * opts, dsd_state * state, int afs, unsigned char lcn
     if (opts->dmr_stereo_wav == 1)
     {
       if (opts->wav_out_f != NULL)
+      {
+        state->event_history_s[0].Event_History_Items[0].target_id  = (uint32_t)afs;
+        state->event_history_s[0].Event_History_Items[0].source_id  = (uint32_t)state->lastsrc;
+        state->event_history_s[0].Event_History_Items[0].gi         = 0;
+        state->event_history_s[0].Event_History_Items[0].event_time = time(NULL);
         opts->wav_out_f = close_and_rename_wav_file(opts->wav_out_f, opts->wav_out_file, opts->wav_out_dir, &state->event_history_s[0]);
+      }
       opts->wav_out_f = open_wav_file(opts->wav_out_dir, opts->wav_out_file, 8000, 0);
     }
     rtl_clean_queue_locked();
