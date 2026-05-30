@@ -513,6 +513,17 @@ typedef struct
   //Use floating point audio output
   int floating_point;
 
+  //EDACS pending grant: saves one grant received while VC is busy so it can
+  //be applied immediately after the current call ends
+  struct {
+    int    valid;
+    int    group;
+    int    lid;
+    int    lcn;
+    int    is_digital;
+    time_t queued_at;
+  } edacs_pending_grant;
+
 } dsd_opts;
 
 typedef struct
@@ -1586,6 +1597,7 @@ int UDPBind (char *hostname, int portno);
 
 //EDACS
 void edacs(dsd_opts * opts, dsd_state * state);
+void edacs_analog(dsd_opts * opts, dsd_state * state, int afs, unsigned char lcn);
 unsigned long long int edacs_bch (unsigned long long int message);
 void eot_cc(dsd_opts * opts, dsd_state * state); //end of TX return to CC
 

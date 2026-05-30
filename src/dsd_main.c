@@ -235,6 +235,39 @@
      state->is_con_plus = 0; //flag off
    }
 
+   /* EDACS grant queue: when VC just became free, immediately tune to any queued grant */
+   #ifdef USE_RTLSDR
+   if (opts->use_second_dongle && opts->p25_trunk == 1 && opts->p25_is_tuned == 0 &&
+       opts->edacs_pending_grant.valid)
+   {
+     if ((time(NULL) - opts->edacs_pending_grant.queued_at) < 15 &&
+         opts->edacs_pending_grant.lcn > 0 &&
+         state->trunk_lcn_freq[opts->edacs_pending_grant.lcn - 1] != 0)
+     {
+       int pg_lcn     = opts->edacs_pending_grant.lcn;
+       int pg_group   = opts->edacs_pending_grant.group;
+       int pg_digital = opts->edacs_pending_grant.is_digital;
+       opts->edacs_pending_grant.valid = 0;
+
+       if (opts->dmr_stereo_wav == 1 && pg_digital == 0)
+       {
+         opts->wav_out_f = close_and_rename_wav_file(opts->wav_out_f, opts->wav_out_file, opts->wav_out_dir, &state->event_history_s[0]);
+         opts->wav_out_f = open_wav_file(opts->wav_out_dir, opts->wav_out_file, 48000, 0);
+       }
+       rtl_dev_tune2(opts, state->trunk_lcn_freq[pg_lcn - 1]);
+       state->edacs_tuned_lcn = pg_lcn;
+       opts->p25_is_tuned = 1;
+       fprintf(stdout, " Voice Grant (queued): %s Group [%04d] LCN [%02d]\n",
+               pg_digital ? "Digital" : "Analog", pg_group, pg_lcn);
+       fflush(stdout);
+       if (pg_digital == 0)
+         edacs_analog(opts, state, pg_group, (unsigned char)pg_lcn);
+     }
+     else
+       opts->edacs_pending_grant.valid = 0; // discard stale grant
+   }
+   #endif
+
    /* EDACS two-dongle CC hunt: when CC sync is lost, cycle through all loaded LCNs */
    #ifdef USE_RTLSDR
    if (opts->use_second_dongle && opts->p25_trunk == 1 && opts->p25_is_tuned == 0 &&

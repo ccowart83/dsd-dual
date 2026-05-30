@@ -1146,42 +1146,54 @@ void edacs(dsd_opts * opts, dsd_state * state)
         {
           if (lcn > 0 && lcn < 26 && state->edacs_cc_lcn != 0 && state->trunk_lcn_freq[lcn-1] != 0) //don't tune if zero (not loaded or otherwise)
           {
-            //openwav file and do per call right here, should probably check as well to make sure we have a valid trunking method active (rigctl, rtl)
-            if (opts->dmr_stereo_wav == 1 && (opts->use_rigctl == 1 || opts->audio_in_type == 3))
+            //if VC is already busy, save this grant and apply it as soon as the current call ends
+            if (opts->p25_is_tuned == 1)
             {
-              if (is_digital == 1) {} //just write to already open temp file to be renamed later
-              else //close the temp 8k wav file and open as 48k
+              opts->edacs_pending_grant.valid      = 1;
+              opts->edacs_pending_grant.group      = group;
+              opts->edacs_pending_grant.lid        = source;
+              opts->edacs_pending_grant.lcn        = lcn;
+              opts->edacs_pending_grant.is_digital = is_digital;
+              opts->edacs_pending_grant.queued_at  = time(NULL);
+            }
+            else
+            {
+              //openwav file and do per call right here, should probably check as well to make sure we have a valid trunking method active (rigctl, rtl)
+              if (opts->dmr_stereo_wav == 1 && (opts->use_rigctl == 1 || opts->audio_in_type == 3))
               {
-                opts->wav_out_f = close_and_rename_wav_file(opts->wav_out_f, opts->wav_out_file, opts->wav_out_dir, &state->event_history_s[0]);
-                opts->wav_out_f = open_wav_file(opts->wav_out_dir, opts->wav_out_file, 48000, 0);
+                if (is_digital == 1) {} //just write to already open temp file to be renamed later
+                else //close the temp 8k wav file and open as 48k
+                {
+                  opts->wav_out_f = close_and_rename_wav_file(opts->wav_out_f, opts->wav_out_file, opts->wav_out_dir, &state->event_history_s[0]);
+                  opts->wav_out_f = open_wav_file(opts->wav_out_dir, opts->wav_out_file, 48000, 0);
+                }
               }
-            }
 
-            //do condition here, in future, will allow us to use tuning methods as well, or rtl_udp as well
-            if (opts->use_rigctl == 1)
-            {
-              if (opts->setmod_bw != 0 ) SetModulation(opts->rigctl_sockfd, opts->setmod_bw);
-              SetFreq(opts->rigctl_sockfd, state->trunk_lcn_freq[lcn-1]); //minus one because the lcn index starts at zero
-              state->edacs_tuned_lcn = lcn;
-              opts->p25_is_tuned = 1;
-              if (is_digital == 0)
-                edacs_analog(opts, state, group, lcn);
-            }
+              //do condition here, in future, will allow us to use tuning methods as well, or rtl_udp as well
+              if (opts->use_rigctl == 1)
+              {
+                if (opts->setmod_bw != 0 ) SetModulation(opts->rigctl_sockfd, opts->setmod_bw);
+                SetFreq(opts->rigctl_sockfd, state->trunk_lcn_freq[lcn-1]); //minus one because the lcn index starts at zero
+                state->edacs_tuned_lcn = lcn;
+                opts->p25_is_tuned = 1;
+                if (is_digital == 0)
+                  edacs_analog(opts, state, group, lcn);
+              }
 
-            if (opts->audio_in_type == 3) //rtl dongle
-            {
-              #ifdef USE_RTLSDR
-              if (opts->use_second_dongle)
-                rtl_dev_tune2 (opts, state->trunk_lcn_freq[lcn-1]);
-              else
-                rtl_dev_tune (opts, state->trunk_lcn_freq[lcn-1]);
-              state->edacs_tuned_lcn = lcn;
-              opts->p25_is_tuned = 1;
-              if (is_digital == 0)
-                edacs_analog(opts, state, group, lcn);
-              #endif
-            }
-
+              if (opts->audio_in_type == 3) //rtl dongle
+              {
+                #ifdef USE_RTLSDR
+                if (opts->use_second_dongle)
+                  rtl_dev_tune2 (opts, state->trunk_lcn_freq[lcn-1]);
+                else
+                  rtl_dev_tune (opts, state->trunk_lcn_freq[lcn-1]);
+                state->edacs_tuned_lcn = lcn;
+                opts->p25_is_tuned = 1;
+                if (is_digital == 0)
+                  edacs_analog(opts, state, group, lcn);
+                #endif
+              }
+            } //end else (VC not busy)
           }
 
         }
@@ -1562,44 +1574,57 @@ void edacs(dsd_opts * opts, dsd_state * state)
         {
           if (lcn > 0 && lcn < 26 && state->edacs_cc_lcn != 0 && state->trunk_lcn_freq[lcn-1] != 0) //don't tune if zero (not loaded or otherwise)
           {
-            //openwav file and do per call right here
-            if (opts->dmr_stereo_wav == 1 && (opts->use_rigctl == 1 || opts->audio_in_type == 3))
+            //if VC is already busy, save this grant and apply it as soon as the current call ends
+            if (opts->p25_is_tuned == 1)
             {
-              if (is_digital == 1) {} //just write to already open temp file to be renamed later
-              else //close the temp 8k wav file and open as 48k
+              opts->edacs_pending_grant.valid      = 1;
+              opts->edacs_pending_grant.group      = group;
+              opts->edacs_pending_grant.lid        = lid;
+              opts->edacs_pending_grant.lcn        = lcn;
+              opts->edacs_pending_grant.is_digital = is_digital;
+              opts->edacs_pending_grant.queued_at  = time(NULL);
+            }
+            else
+            {
+              //openwav file and do per call right here
+              if (opts->dmr_stereo_wav == 1 && (opts->use_rigctl == 1 || opts->audio_in_type == 3))
               {
-                opts->wav_out_f = close_and_rename_wav_file(opts->wav_out_f, opts->wav_out_file, opts->wav_out_dir, &state->event_history_s[0]);
-                opts->wav_out_f = open_wav_file(opts->wav_out_dir, opts->wav_out_file, 48000, 0);
+                if (is_digital == 1) {} //just write to already open temp file to be renamed later
+                else //close the temp 8k wav file and open as 48k
+                {
+                  opts->wav_out_f = close_and_rename_wav_file(opts->wav_out_f, opts->wav_out_file, opts->wav_out_dir, &state->event_history_s[0]);
+                  opts->wav_out_f = open_wav_file(opts->wav_out_dir, opts->wav_out_file, 48000, 0);
+                }
               }
-            }
 
-            if (opts->use_rigctl == 1)
-            {
-              //only set bandwidth IF we have an original one to fall back to (experimental, but requires user to set the -B 12000 or -B 24000 value manually)
-              if (opts->setmod_bw != 0)
+              if (opts->use_rigctl == 1)
               {
-                if (is_digital == 0) SetModulation(opts->rigctl_sockfd, 7000); //narrower bandwidth, but has issues with dotting sequence
-                else                 SetModulation(opts->rigctl_sockfd, opts->setmod_bw);
+                //only set bandwidth IF we have an original one to fall back to (experimental, but requires user to set the -B 12000 or -B 24000 value manually)
+                if (opts->setmod_bw != 0)
+                {
+                  if (is_digital == 0) SetModulation(opts->rigctl_sockfd, 7000); //narrower bandwidth, but has issues with dotting sequence
+                  else                 SetModulation(opts->rigctl_sockfd, opts->setmod_bw);
+                }
+
+                SetFreq(opts->rigctl_sockfd, state->trunk_lcn_freq[lcn-1]); //minus one because our index starts at zero
+                state->edacs_tuned_lcn = lcn;
+                opts->p25_is_tuned = 1;
+                if (is_digital == 0) edacs_analog(opts, state, group, lcn);
               }
 
-              SetFreq(opts->rigctl_sockfd, state->trunk_lcn_freq[lcn-1]); //minus one because our index starts at zero
-              state->edacs_tuned_lcn = lcn;
-              opts->p25_is_tuned = 1;
-              if (is_digital == 0) edacs_analog(opts, state, group, lcn);
-            }
-
-            if (opts->audio_in_type == 3) //rtl dongle
-            {
-              #ifdef USE_RTLSDR
-              if (opts->use_second_dongle)
-                rtl_dev_tune2 (opts, state->trunk_lcn_freq[lcn-1]);
-              else
-                rtl_dev_tune (opts, state->trunk_lcn_freq[lcn-1]);
-              state->edacs_tuned_lcn = lcn;
-              opts->p25_is_tuned = 1;
-              if (is_digital == 0) edacs_analog(opts, state, group, lcn);
-              #endif
-            }
+              if (opts->audio_in_type == 3) //rtl dongle
+              {
+                #ifdef USE_RTLSDR
+                if (opts->use_second_dongle)
+                  rtl_dev_tune2 (opts, state->trunk_lcn_freq[lcn-1]);
+                else
+                  rtl_dev_tune (opts, state->trunk_lcn_freq[lcn-1]);
+                state->edacs_tuned_lcn = lcn;
+                opts->p25_is_tuned = 1;
+                if (is_digital == 0) edacs_analog(opts, state, group, lcn);
+                #endif
+              }
+            } //end else (VC not busy)
           }
         }
       }
