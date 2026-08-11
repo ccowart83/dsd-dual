@@ -1,0 +1,7 @@
+[Unit]
+Description=Watchdog for dsd-fme-scanner (restarts on silent hang, e.g. RTL-SDR USB dropout)
+After=dsd-fme-scanner.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/dsd-fme-watchdog.sh
